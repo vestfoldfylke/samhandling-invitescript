@@ -15,9 +15,13 @@ For hver entra-gruppe som skal over til tilsvarende Samhandling-gruppe,
     - Meld ut medlemmer som ikke lenger skal være medlem (mangler i Entra-gruppen fra kilden)
 Lag en rapport på resultatet (konsoll og logg)
 
+Husk å filtrere på enablede brukere
+
 #>
 # Importer miljøvariabler fra env.ps1
 $envFilePath = "./env.ps1"
+$apiUrl = "https://samhandling-user-management-c8fuhhf6ftb8age4.norwayeast-01.azurewebsites.net/api"
+
 if (Test-Path $envFilePath) {
     try {
         . $envFilePath
@@ -34,7 +38,7 @@ Import-Module Microsoft.Graph.Authentication -ErrorAction Stop
 Import-Module Microsoft.Graph.Groups -ErrorAction Stop
 
 # Valider at alle nødvendige miljøvariabler er satt
-$requiredEnvVars = @("clientId", "tenantId", "clientSecret", "groupMapping", "logDirectory")
+$requiredEnvVars = @("clientId", "tenantId", "clientSecret", "groupMapping", "logDirectory", "functionKey", "countyKey")
 foreach ($envVar in $requiredEnvVars) {
     if (-not (Get-Variable -Name $envVar -ErrorAction SilentlyContinue)) {
         Write-Error "Miljøvariabelen $envVar er ikke satt."
@@ -84,7 +88,7 @@ Write-Log -Message "Starter scriptet." -Level "INFO"
 
 # Debug: Skriv ut $groupMapping for å bekrefte
 try {
-    Write-Log -Message "Starter å skrive ut gruppemapping." -Level "INFO"
+    Write-Log -Message "Skriver ut gruppemapping." -Level "INFO"
     $groupMapping.GetEnumerator() | ForEach-Object { Write-Log -Message "$($_.Key) = $($_.Value)" -Level "DEBUG" }
 } catch {
     Write-Log -Message "Feil ved lesing av gruppemapping: $_" -Level "ERROR"
@@ -146,45 +150,59 @@ function Sync-GroupMembers {
             Display Name : $($member.DisplayName)
             User Principal Name : $($member.UserPrincipalName)
             ID : $($member.Id)
+            Mail: $($member.Mail)
             ------------------------------
 "@
             Write-Host $memberInfo -ForegroundColor Cyan
         }
         # Hente medlemmer fra målgruppen
-        # $targetMembers = Get-GroupMembers -GroupName $TargetGroupName
+        $targetMembers = $null
+        try {
+            $targetMembers = Invoke-RestMethod -Uri "$($apiUrl)/members/$($targetGroupName)" -Headers @{
+                "X-Functions-Key" = $functionKey
+                "X-County-Key" = $countyKey
+                "Content-Type" = "application/json"
+            } -Method Get #| ConvertFrom-Json
+            #$targetMembers
+            Write-Log -Message "Fant $($targetMembers.Count) i gruppe $TargetGroupName." -Level "INFO"
+        } catch {
+            Write-Log -Message "Feil ved henting av medlemmer fra gruppe $TargetGroupName : $_" -Level "ERROR"
+        } 
+        
 
         # Finn medlemmer som mangler i målgruppen
-        # $membersToAdd = $sourceMembers | Where-Object { $_.Id -notin $targetMembers.Id }
-<#
+        $membersToAdd = $sourceMembers | Where-Object { $_.Mail -notin $targetMembers.mail }
+        #$membersToAdd
+        
         # Legg til manglende medlemmer
         foreach ($member in $membersToAdd) {
             try {
-                Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/groups/$($targetMembers.Id)/members/\$ref" -Headers @{
-                    Authorization = "Bearer $(Get-MgGraphAccessToken)"
+                Invoke-RestMethod -Uri "$($apiUrl)/members/$($targetGroupName)" -Headers @{
+                    "X-Functions-Key" = $functionKey
+                    "X-County-Key" = $countyKey
                     "Content-Type" = "application/json"
-                } -Method Post -Body (@{ "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$($member.Id)" } | ConvertTo-Json -Depth 1)
-                Write-Log -Message "La til medlem $($member.DisplayName) i gruppe $TargetGroupName." -Level "INFO"
+                } -Method Post -Body (@{ "displayName" = "$($member.DisplayName)"; "mail" = "$($member.Mail)" } | ConvertTo-Json -Depth 1)
+                Write-Log -Message "La til medlem $($member.DisplayName) ($($member.Mail)) i gruppe $TargetGroupName." -Level "INFO"
             } catch {
-                Write-Log -Message "Feil ved legging til medlem $($member.DisplayName) i gruppe $TargetGroupName : $_" -Level "ERROR"
+                Write-Log -Message "Feil ved innmelding av medlem $($member.DisplayName) ($($member.Mail)) i gruppe $TargetGroupName : $_" -Level "ERROR"
             }
-        }
-
+        } 
         # Finn medlemmer som skal fjernes fra målgruppen
-        $membersToRemove = $targetMembers | Where-Object { $_.Id -notin $sourceMembers.Id }
+        $membersToRemove = $targetMembers | Where-Object { $_.mail -notin $sourceMembers.Mail }     
 
         # Fjern medlemmer som ikke lenger skal være medlem
         foreach ($member in $membersToRemove) {
             try {
-                Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/groups/$($targetMembers.Id)/members/$($member.Id)/\$ref" -Headers @{
-                    Authorization = "Bearer $(Get-MgGraphAccessToken)"
-                    "Content-Type" = "application/json"
+                Invoke-RestMethod -Uri "$($apiUrl)/members/$($targetGroupName)/$($member.mail)" -Headers @{
+                    "X-Functions-Key" = $functionKey
+                    "X-County-Key" = $countyKey
                 } -Method Delete
-                Write-Log -Message "Fjernet medlem $($member.DisplayName) fra gruppe $TargetGroupName." -Level "INFO"
+                Write-Log -Message "Fjernet medlem $($member.displayName) ($($member.mail)) fra gruppe $TargetGroupName." -Level "INFO"
             } catch {
-                Write-Log -Message "Feil ved fjerning av medlem $($member.DisplayName) fra gruppe $TargetGroupName : $_" -Level "ERROR"
+                Write-Log -Message "Feil ved fjerning av medlem $($member.displayName) ($($member.mail)) fra gruppe $TargetGroupName : $_" -Level "ERROR"
             }
         }
-        #>
+        
     } catch {
         Write-Log -Message "Feil under synkronisering av grupper $SourceGroupName til $TargetGroupName : $_" -Level "ERROR"
     }
