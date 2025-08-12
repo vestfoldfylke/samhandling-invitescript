@@ -58,7 +58,7 @@ cd samhandling-invitescript
     App-registreringen er nå klar til bruk.
 
 1. **Opprett miljøvariabler**  
-    Opprett en `env.ps1`-fil i samme katalog som skriptet. Filen skal inneholde følgende miljøvariabler:
+    Opprett en `env.ps1`-fil i samme katalog som skriptet. Filen må encodes slik at norske tegn vises (eks. UTF-8 with BOM) Filen skal inneholde følgende miljøvariabler:
     ```powershell
     # Microsoft Graph API-innstillinger
     $CLIENT_ID = "<Din Client ID>"
