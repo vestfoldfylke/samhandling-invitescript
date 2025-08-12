@@ -1,205 +1,117 @@
-# Oppdatering til ModernAuth (for eksisterende organisasjoner)
-**Må gjøres før 31.12.2022**
-- Stopp scriptet (tasken) om det kjører før du gjør endringer
-- Åpne Powershell med brukeren som skal kjøre scriptet. ![image](https://user-images.githubusercontent.com/10476574/206709727-ac3229cb-cb28-4017-a213-7301d278d2de.png)
-- Sjekk at du har Windows Credential Manager på serveren. Om den mangler, installer med kommandoen:
+# Samhandling User Management
+PowerShell-skript for administrasjon av brukere i Teams-grupper tilknyttet samhandling.org. Skriptet leser medlemskap i grupper fra organisasjonens Entra ID og benytter [API-et i samhandling.org](https://github.com/vestfoldfylke/samhandling-user-management-api) for å legge til eller fjerne brukere fra Samhandling. API-et sørger for å invitere brukere som ikke allerede finnes i samhandling-tenanten. Brukermatching mellom fylkets og samhandling-tenanten baseres på mail-egenskapen. API-et håndterer også oppdatering av mail-egenskapen ved behov.
 
-    `Install-Module -Name CredentialManager -AcceptLicense -AllowClobber -Force -Verbose -Scope AllUsers`
-- Installer powershell PnP Module med kommandoen  ~~`Install-Module -Name "PnP.PowerShell`~~ 
-> [!IMPORTANT]  
-> På grunn av [issues med nyere versjoner av PNP](https://learn.microsoft.com/en-us/answers/questions/1196279/import-module-could-not-load-file-or-assembly-syst), må eldre versjon legges inn: `Install-Module -Name "PnP.PowerShell" -RequiredVersion 1.12.0 -Force -AllowClobber`
-- Kjør først kommandoen under for å sette nytt passord på PNP-brukeren du har fått fra VTFK:
-   
-    `Connect-PnPOnline -Url https://samhandling.sharepoint.com/sites/b2bmembershipdata -clientid af65f65a-6b1b-4499-81e5-1540fba4431e -Interactive`  
-- Logg på i påloggingsvinuet som dukker opp med PNP-brukeren du har fått av VTFK – sett nytt passord, og lagre dette trygt 
-- Kjør kommandoen under for å legge inn credentials med det NYE PASSORDET til PNP-brukeren i Windows Credential Store: 
+![Samhandling User Management](v2.png)
 
-    `New-StoredCredential -Comment 'Samhandling-service-bruker' -Credentials $(Get-Credential) -Target '<organisasjon>-pnp-user@samhandling.onmicrosoft.com' -Persist ‘LocalMachine’` 
-- Kjør kommandoen under for å bekrefte at passordet har blitt lagret og brukeren har tilgang på SharePoint:
-    `Connect-PnPOnline -Url https://samhandling.sharepoint.com/sites/b2bmembershipdata -clientid af65f65a-6b1b-4499-81e5-1540fba4431e -Credential  (Get-StoredCredential -Target "<organisasjon>-pnp-user@samhandling.onmicrosoft.com") `
-- Oppdater konfigurasjon i invite-skriptet (linje 27, 28 og 90 i originalskriptet. Se under:).
-```ps1
-#region Script Configuration: Source Azure AD Tenant
+## Oppsett og installasjon
 
-# Add source AAD tenant ID
-$configSourceTenantID = "organisasjon.onmicrosoft.com"
+1. **Installer PowerShell (hvis nødvendig)**
+Skriptet krever PowerShell 5.1 eller nyere. Hvis du bruker macOS eller Linux, anbefales det å installere PowerShell Core (7.x). Du kan laste det ned fra [PowerShells offisielle nettside](https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell?view=powershell-7.5).
 
-# Add UserPrincipalName for AAD Service Account in source AAD tenant
-$configSourceServiceAccountUPN = "Samhandlingb2binviteUser@organisasjon.no"
+1. **Installer nødvendige PowerShell-moduler**  
+    Sørg for at følgende moduler er installert:
+    ```powershell
+    Install-Module -Name Microsoft.Graph.Authentication -Force
+    Install-Module -Name Microsoft.Graph.Groups -Force
+    ```
 
-
-### DENNE MÅ LEGGES TIL ### 
-# Add UserPrincipalName for PnP Service Account in samhandling AAD tenant (provided by samhandling.org host county (VTFK))
-$configSourcePnPServiceAccountUPN = "<organisasjon>-pnp-user@samhandling.onmicrosoft.com"
-### END DENNE MÅ LEGGES TIL ###
-
-
-# Add SecureString for AAD Service Account password in source AAD tenant. See readme how to create this
-$configSourceServiceAccountSecurePassword = 'longsupersecurestring'
-
-# Add AAD Groups to scope B2B Users in source AAD tenant
-$configSourceGroupsToInvite = "TILGANGSGRUPPE1", "TILGANGSGRUPPE2", "TILGANGSGRUPPE3"
-
-# Add a filename and path for saving local logfile with invited users data
-$configSourceLogfilePreviouslyInvitedUsers = "D:\localScriptPath\b2binvitedusers-organization.txt"
-
-# Add a filepath for creating local csv file with membership data (exports to Master Organization)
-$configSourceMembershipDataCsv = "D:\localScriptPath\export-membershipdata-organization.csv"
-
-# Enable extensive logging to EventLog
-$configSourceExtensiveLogging = $true
-
-#endregion
-
-
-
-
-#region Set Parameters
-
-    # Set parameters
-    $GLOBAL:Configuration = @{
-
-        SourceTenantID = $configSourceTenantID
-        SourceSvcUPN = $configSourceServiceAccountUPN
-        
-        ##### DENNE RADEN MÅ OGSÅ LEGGES TIL ###  #####
-        SourcePnPSvcUPN = $configSourcePnPServiceAccountUPN 
-        ##### END DENNE RADEN MÅ OGSÅ LEGGES TIL ###  #####
-        
-        SourceSvcPwd = $configSourceServiceAccountSecurePassword
-        SourceAADInviteGroups = $configSourceGroupsToInvite
-        TargetTenantID = $configTargetTenantID
-        TargetSPOSiteUrl = $configTargetSPOSiteUrl
-        TargetSPODocLibrary = $configTargetSPODocLibraryName
-        LogfilePreviouslyInvitedUsers = $configSourceLogfilePreviouslyInvitedUsers
-        CsvfileMembershipData  = $configSourceMembershipDataCsv
-        ExtensiveLogging = $configSourceExtensiveLogging
-        
-    }
-
+1. **Klone repoet der det skal kjøres fra**
+```bash
+git clone https://github.com/vestfoldfylke/samhandling-invitescript.git
+cd samhandling-invitescript
 ```
-- **VIKTIG!** Bytt ut den eksisterende modulen *Azure-AD-B2B-Invite-Module.psm1* med den nye modulen som bruker PnP: [ny modul-fil](./Azure-AD-B2B-Invite-Module.psm1) (kall f. eks den andre module_old først, også legger du inn den nye som erstatter, slik at hovedskriptet bruker den nye modulen) 
-- Nå kan du kjøre scriptet som før (starte tasken)
 
-# Oppsett av Invite-script for nye organisasjoner
-Beskriver hvordan partnerorganisasjoner kan melde "lokale" AzureAD-brukere inn og ut som gjestebrukere i Samhandling.org. Dette håndteres av PowerShellskript som må kjøres hos den enkelte partnerorganisasjon. Her følger beskrivelse på hvordan dette gjøres.
+1. **Opprett en App Registration i Azure**
 
-![image](https://user-images.githubusercontent.com/10476574/206708780-61b122bd-61b3-403d-8f8b-854a6704bfb5.png)
+    1. **Logg inn på Azure-portalen**  
+        Gå til [Azure-portalen](https://portal.azure.com) og logg inn med en konto som har nødvendige rettigheter.
 
+    2. **Naviger til App Registrations**  
+        I søkefeltet øverst, søk etter "App registrations" og velg det fra resultatene.
 
-Administrasjon av tilgangen gjøres ved å melde brukere inn og ut av grupper i hver enkelt partnerorganisasjons AzureAD i Office365. Det kreves litt arbeid for å få på plass lokalt skript, og hvordan dette gjøres er beskrevet i dette dokumentet.
-Skriptet er utviklet av Vestfold og Telemark fylkeskommune. Denne veiledningen er en forenklet utgave av den fullstendige dokumentasjonen
+    3. **Opprett en ny App Registration**  
+        Klikk på **New registration** og fyll ut følgende:
+        - **Name**: Gi appen et beskrivende navn, f.eks. `SamhandlingUserManagement`.
+        - **Supported account types**: Velg "Accounts in this organizational directory only".
+        - **Redirect URI**: Dette kan stå tomt for denne applikasjonen.
 
-## Oppsett og førstegangs-konfigurasjon
+        Klikk på **Register** for å opprette appen.
 
-### Forutsetninger
-- Organisasjonen må ha O365 lisenser
-- Brukerne må være i AzureAd
-- Primary e-postadresse må være utfylt på brukerobjektene i AzureAD
+    4. **Legg til API-tillatelser**  
+        - Gå til **API permissions** i menyen til venstre.
+        - Klikk på **Add a permission** og velg **Microsoft Graph**.
+        - Velg **Application permissions** og legg til:
+          - `GroupMember.Read.All`
+          - `User.Read.All`
+        - Klikk på **Grant admin consent** for å gi nødvendige tillatelser.
 
-### Parameterutveksling
-Følgende trenger VFK fra partnerorganisasjon:
-1.	UPN til servicekonto i Azure AD
-2.	Navn på grupper og hva de skal ha tilgang til
+    5. **Opprett en Client Secret**  
+        - Gå til **Certificates & secrets** i menyen til venstre.
+        - Klikk på **New client secret**.
+        - Gi den en beskrivelse og velg en utløpstid.
+        - Klikk **Add** og kopier verdien av hemmeligheten. Denne brukes som `$CLIENT_SECRET`.
 
-Følgende får partnerorganisasjon fra VTFK:
+    6. **Noter ned App ID og Tenant ID**  
+        - Gå til **Overview** i menyen til venstre.
+        - Kopier **Application (client) ID** og **Directory (tenant) ID**. Disse brukes som henholdsvis `$CLIENT_ID` og `$TENANT_ID`.
 
-3.	Påloggings URL som servicekonto i pkt 1 må logge seg på med.
-Disse parameterne vil bli forklart nedenfor. 
+    App-registreringen er nå klar til bruk.
 
-### Servicekonto
-Det må opprettes en Windows-konto som skal kjøre det lokale skriptet.
+1. **Opprett miljøvariabler**  
+    Opprett en `env.ps1`-fil i samme katalog som skriptet. Filen skal inneholde følgende miljøvariabler:
+    ```powershell
+    # Microsoft Graph API-innstillinger
+    $CLIENT_ID = "<Din Client ID>"
+    $TENANT_ID = "<Din Tenant ID>"
+    $CLIENT_SECRET = "<Din Client Secret>"
 
-Det må også opprettes en servicekonto i AzureAD der brukere skal inviteres fra. Denne kontoen må ha lik suffix-adresse i UserPrincipalName (UPN) som brukerne som skal meldes inn. Det er ikke behov for spesielle privilegier. Eksempel på konto: *samhandlingb2binvite@vtfk.no*
+    # Logginnstillinger
+    $LOG_DIRECTORY = "<Sti til loggmappe>"
 
-Send kontoens UPN til VTFK på mailadresse *servicedesk@vestfoldfylke.no*, slik at VFK kan legge denne inn i Samhandling.org tenanten. VTFK sender en URL i retur som må besøkes. 
+    # Samhandling API-innstillinger
+    $FUNCTION_KEY = "<API-nøkkel>" # Denne nøkkelen tildeles av vertsorganisasjonen
+    $COUNTY_KEY = "<Fylkesnøkkel>" # Denne nøkkelen tildeles av vertsorganisasjonen og brukes til å styre hvilke brukere du har tilgang til å håndtere i Samhandling.org. Nøkkelen er mappet mot gyldige e-postsuffixer som API-et kan håndtere.
 
-1.	Besøk URL'en og logg på med servicekontoens brukernavn og passord
+    # Gruppemapping (målgruppe -> kildegruppe)
+    $GROUP_MAPPING = @{
+        # "<Samhandling-gruppenavn>" = "<Entra-gruppenavn fra egen tenant>"
+        "IT-Forum"                              = "<Entra-gruppenavn fra egen tenant>"
+        "Elements forvaltning"                  = "<Entra-gruppenavn fra egen tenant>"
+        "PVO i fylkeskommunene"                 = "<Entra-gruppenavn fra egen tenant>"
+        "SAMS"                                  = "<Entra-gruppenavn fra egen tenant>"
+        "Fylkeskommunalt HR-nettverk"           = "<Entra-gruppenavn fra egen tenant>"
+        "Fylkeskommunalt arkivledernettverk"    = "<Entra-gruppenavn fra egen tenant>"
+        "Produktrad for Prosjektportalen"       = "<Entra-gruppenavn fra egen tenant>"
+        "Fylkeskultursjefkollegiet"             = "<Entra-gruppenavn fra egen tenant>"
+        "FK-samarbeid dig. og IKT"              = "<Entra-gruppenavn fra egen tenant>"
+        "HR og IKT-digitaliseringskollegiet"    = "<Entra-gruppenavn fra egen tenant>"
+        "Fylkesnettverk for innovasjon"         = "<Entra-gruppenavn fra egen tenant>"
+        "Informasjonssikkerhet og personvern"   = "<Entra-gruppenavn fra egen tenant>"
+        "Opplæring"                             = "<Entra-gruppenavn fra egen tenant>"
+        "Fylkeskommunalt Innkjøpsforum"         = "<Entra-gruppenavn fra egen tenant>"
+        "Tannhelse"                             = "<Entra-gruppenavn fra egen tenant>"
+        "Fylkeskommunalt eiendomsforum (FEF)"   = "<Entra-gruppenavn fra egen tenant>"
+        "Samferdsel"                            = "<Entra-gruppenavn fra egen tenant>"   
+    }
+    ```
 
-    
-2.	Kryptere passord for servicekontoen (skal benyttes i skript)
-    1.	Start PowerShell ISE som Windows-servicekontoen som ble opprettet tidligere.
-    2.	Kjør følgende kode:
- `Read-Host -AsSecureString | ConvertFrom-SecureString`
+1. **Opprett loggmappe**  
+    Sørg for at mappen spesifisert i `$LOG_DIRECTORY` eksisterer, eller la skriptet opprette den automatisk.
 
-    3.	Skriv inn passordet til AzureAD servicekontoen
-    4.	Resultatet er den krypterte strengen som skal benyttes i [Grupper](#grupper). Ta derfor vare på denne.
+1. **Kjør skriptet**  
+    Start skriptet ved å kjøre:
+    ```powershell
+    .\samhandling-user-management.ps1
+    ```
+    Vi anbefaler å kjøre skriptet som en scheduled task
 
-**MERK:**
-Hvis Powershell-scriptet flyttes til en annen server, eller en annen Windows servicekonto skal ta over kjøringen av scriptet, så må man kjøre Powershell-kommandoen igjen for å opprette ny kryptert string. Merk at brukere med lokal-administratortilgang på serveren der strengen krypteres, kan i teorien hente ut passordet i klartekst.
-
-### Grupper
-Brukere blir meldt inn og gitt tilgang til samhandling.org basert på grupper i partnerorganisasjonen AzureAD. Opprett en eller flere grupper i AzureAD, meld brukerne inn i disse avhengig av hva de skal ha tilgang til og noter navnet på den/disse. Dette vil bli brukt videre i [skript](#skript).
-
-Eksempel:
-
-| **Gruppe i lokalt AAD** |
-| --- |
-| samhandling-ITforum |
-| samhandling-HRforum |
-
-
-### Skript
-Skriptet består av to filer:
-
-Azure-AD-B2B-Invite-Script.ps1 og Azure-AD-B2B-Invite-Module.psm1. Dette må kjøres på en server som har tilgang til Office365. I tillegg må serveren ha AzureAD Powershell-modulen og SharePoint Online Client Components SDK installert. Disse kan lastes ned herfra:
-
-- AzureAD Powershell-modul (kjøres i PowerShell som administrator): `Install-Module -Name AzureAD`
-
-- PnP PowerShell (kjøres i PowerShell som administrator): `Install-Module -Name "PnP.PowerShell"`
-#### Plassering av skriptet
-Legg skriptet (begge filene) i en mappe på serveren (for eksempel c:\Script\)
-#### Logging
-For at Powershell-scriptet skal kunne loggføre så må det opprettes en ny EventLog. Dette kan gjøres fra Powershell (elevert som lokal administrator på serveren) med følgende kommando:
-
-`New-EventLog -LogName Application -Source "B2BInviteScript"`
-
-Når scriptet kjører så vil det logge til den nye event loggen som dermed kan overvåkes. Både feil og varsler blir skrevet til loggen og vil dermed kunne ageres på om feil skulle oppstå. Se kapittelet om overvåking og feilsøking for mer informasjon.
-
-Merk at hvis AzureAD, SharePoint PnP eller event loggen mangler på serveren der scriptet kjøres, så vil scriptet feile og stoppe.
-#### Parametersetting
-Åpne PS1-fila i en dertil egnet editor (for eks. VSCode) og rediger følgende parametere:
-
-| Parameter | $configSourceTenantID |
-| --- | --- |
-| Beskrivelse | AzureAD tenant der brukere skal inviteres fra |
-| Eksempel | "vtfk.onmicrosoft.com" |
-
-| Parameter | $configSourcePnPServiceAccountUPN |
-| --- | --- |
-| Beskrivelse | PnP service-bruker som blir levert fra Samhandling.org-tenanten (fra VTFK) |
-| Eksempel | vtfk-pnp-user@samhandling.onmicrosoft.com |
-
-| Parameter | $configSourceServiceAccountUPN |
-| --- | --- |
-| Beskrivelse | UserPrincipalName for b2binvite-servicekonto. Se [forutsetning](#forutsetninger) |
-| Eksempel | "samhandlingb2binvite@vtfk.no" |
-
-| Parameter | $configSourceServiceAccountSecurePassword |
-| --- | --- |
-| Beskrivelse | Den krypterte strengen som ble laget i [servicekonto](#servicekonto) |
-| Eksempel | "01000000d08c9ddf0000d08c9ddf0115d01000000d08c9ddf0115d101000000d08c9ddf0115d101000000d08c9ddf0115d101000000d08c9ddf0115d101000000d08c9ddf0115d1" |
-
-| Parameter | $configSourceGroupsToInvite |
-| --- | --- |
-| Beskrivelse | AzureAD-grupper som det skal meldes inn brukere fra. Disse ble definert i [Grupper](#Grupper). Skriv inn gruppene kommaseparert med anførselstegn rundt hvert gruppenavn. 
-|Eksempel | "AADGroup1","AADGroup2","AADGroup4" |
-
-| Parameter | $configSourceLogfilePreviouslyInvitedUsers |
-| --- | --- |
-| Beskrivelse | For at Powershell-scriptet skal unngå å kjøre invitasjon på nytt for mailadresser/brukere som allerede er inviterte så lagrer scriptet en loggfil lokalt på serveren med alle inviterte mailadresser. Denne loggfilen vil importeres hver gang scriptet kjører og brukes til å filtrere ut allerede inviterte mailadresser før invitasjonsrutinen starter. **Det er viktig at Windows-servicekontoen som kjører scriptet har skrivetilgang til området/filen som defineres** |
-| Eksempel | "c:\log\b2binvitedusers.txt" |
-
-| Parameter | $configSourceMembershipDataCsv |
-| --- | --- |
-| Beskrivelse | Data om medlemskap blir lagt inn I en CSV fil lokalt som blir overført til samhandling.org-tenanten. Skriv inn filstien til lokalt område der denne filen blir mellomlagret. |
-| Eksempel | "c:\log\export-membershipdata.csv" |
-
-| Parameter | $configSourceExtensiveLogging |
-| --- | --- |
-| Beskrivelse | Powershell-scriptet vil alltid logge til «Application» eventlog på den lokale serveren slik at feilsøking og overvåking blir enklere. I normal drift kan dette parameteret være satt til $false, da blir det kun opprettet events ved start og stopp av scriptet (med resultater), samt advarsler og feilsituasjoner. Men hvis man ønsker å se mer detaljer ved kjøring av scriptet, kan man sette parameteret til $true, da vil scriptet logge all «verbose output» til eventlog |
-| Eksempel | $false |
-
-De resterende parameterne er allerede definert.
-#### Kjøring av skript
-Vi anbefaler at skriptet settes opp til å kjøre jevnlig ved hjelp av Scheduled Tasks med Windowskontoen definert i [Servicekonto](#servicekonto)
+## Feilsøking
+- **Feil**: `Miljøvariabelen ... er ikke satt.`
+    - Sørg for at alle nødvendige miljøvariabler er definert i env.ps1.
+- **Feil**: `Feil ved tilkobling til Microsoft Graph.`
+    - Kontroller at klient-ID, klienthemmelighet og tenant-ID er riktige.
+    - Sørg for at appen har nødvendige API-tillatelser.
+- **Feil**: `Miljøfilen env.ps1 ble ikke funnet.`
+    - Sørg for at env.ps1 ligger i samme mappe som skriptet.
+- **Feil**: `Forbidden: User mail (mail) does not match any of the allowed UPN suffixes: [list of allowed suffixes for your county key]`
+    - Ta kontakt med vertsorganisasjonen for å få lagt til nye suffixes.
