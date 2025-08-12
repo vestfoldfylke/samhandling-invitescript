@@ -63,10 +63,10 @@ cd samhandling-invitescript
     # Microsoft Graph API-innstillinger
     $CLIENT_ID = "<Din Client ID>"
     $TENANT_ID = "<Din Tenant ID>"
-    $CLIENT_SECRET = "<Din Client Secret>"
+    $CLIENT_SECRET = ConvertTo-SecureString -String "<Din Client Secret>" -AsPlainText -Force 
 
     # Logginnstillinger
-    $LOG_DIRECTORY = "<Sti til loggmappe>"
+    $LOG_DIRECTORY = "./logs"
 
     # Samhandling API-innstillinger
     $FUNCTION_KEY = "<API-nøkkel>" # Denne nøkkelen tildeles av vertsorganisasjonen

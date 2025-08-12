@@ -1,4 +1,4 @@
-# Importer miljøvariabler fra env.ps1
+﻿# Importer miljøvariabler fra env.ps1
 $envFilePath = "./env.ps1"
 $apiUrl = "https://user.samhandling.org/api"
 
@@ -50,7 +50,7 @@ function Write-Log {
     $logEntry = "[$timestamp] [$Level] $Message"
     
     # Logg til fil
-    Add-Content -Path $logFilePath -Value $logEntry
+    Add-Content -Path $logFilePath -Value $logEntry -Encoding BigEndianUnicode
 
     # Logg til konsoll
     if ($Level -eq "ERROR") {
@@ -96,7 +96,6 @@ function Get-GroupMembers {
             Write-Log -Message "Fant ingen gruppe med display name $GroupName." -Level "ERROR"
             exit 1
         }
-
         # Bruk gruppe-ID for å hente medlemmer
         $groupId = $group.Id
         Write-Log -Message "Henter medlemmer for gruppe $GroupName." -Level "INFO"
