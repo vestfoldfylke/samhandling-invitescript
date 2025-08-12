@@ -116,8 +116,7 @@ function Get-TargetGroupMembers {
             "X-Functions-Key" = $FUNCTION_KEY
             "X-County-Key" = $COUNTY_KEY
             "Content-Type" = "application/json"
-        } -Method Get #| ConvertFrom-Json
-        #$targetMembers
+        } -Method Get
         Write-Log -Message "Fant $($targetMembers.Count) i gruppe $GroupName." -Level "INFO"
         return $targetMembers
     } catch {
@@ -155,7 +154,6 @@ function Sync-GroupMembers {
         
         # Finn medlemmer som mangler i målgruppen
         $membersToAdd = $sourceMembers | Where-Object { $_.Mail -notin $targetMembers.mail }
-        #$membersToAdd
         
         # Legg til manglende medlemmer
         foreach ($member in $membersToAdd) {
