@@ -1,4 +1,5 @@
-﻿# Importer miljøvariabler fra env.ps1
+﻿Set-Location $PSScriptRoot
+# Importer miljøvariabler fra env.ps1
 $envFilePath = "./env.ps1"
 $apiUrl = "https://user.samhandling.org/api"
 
