@@ -91,7 +91,9 @@ cd samhandling-invitescript
         "Fylkeskommunalt Innkjøpsforum"         = "<Entra-gruppenavn fra egen tenant>"
         "Tannhelse"                             = "<Entra-gruppenavn fra egen tenant>"
         "Fylkeskommunalt eiendomsforum (FEF)"   = "<Entra-gruppenavn fra egen tenant>"
-        "Samferdsel"                            = "<Entra-gruppenavn fra egen tenant>"   
+        "Samferdsel"                            = "<Entra-gruppenavn fra egen tenant>"
+        "Kommunikasjonsforum"                   = "<Entra-gruppenavn fra egen tenant>"
+        "Konseptutredning - Håndtering av historiske opplysninger" = "<Entra-gruppenavn fra egen tenant>"
     }
     ```
 
