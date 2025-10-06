@@ -94,6 +94,7 @@ cd samhandling-invitescript
         "Samferdsel"                            = "<Entra-gruppenavn fra egen tenant>"
         "Kommunikasjonsforum"                   = "<Entra-gruppenavn fra egen tenant>"
         "Konseptutredning - Håndtering av historiske opplysninger" = "<Entra-gruppenavn fra egen tenant>"
+        "Nettredaktørforum"                     = "<Entra-gruppenavn fra egen tenant>"
     }
     ```
 
