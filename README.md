@@ -95,6 +95,7 @@ cd samhandling-invitescript
         "Kommunikasjonsforum"                   = "<Entra-gruppenavn fra egen tenant>"
         "Konseptutredning - Håndtering av historiske opplysninger" = "<Entra-gruppenavn fra egen tenant>"
         "Nettredaktørforum"                     = "<Entra-gruppenavn fra egen tenant>"
+        "Oppfølgingstjenesten - MIO"            = "<Entra-gruppenavn fra egen tenant>"
     }
     ```
 
